@@ -1,30 +1,51 @@
-//unique labels for eq lt gt
 import ceylon.file { ... }
+//import ceylon.collection {MutableList}
 
 class VMParseException(String message) extends ParseException(message) {}
 
 shared void run() {
-	value userPath="D:/ceylon/ex1/testfiles/StackArithmetic/StackTest";
-	value path = parsePath(userPath);
-	if (is Directory dir = path.resource) {
-		{File*} vmFiles = dir.files("*.vm");
-		
-		if (vmFiles.empty) {print("No files to convert");}
-		
-		for (file in vmFiles) {
-			value outFilePath = file.path.siblingPath(getAsmFilename(file.path));
-			if (is File|Nil loc = outFilePath.resource){
-				File outFile = createFileIfNil(loc);
-				try (fileAppender = outFile.Appender()){
+	String? userPath=process.arguments.first;
+	if (exists userPath) {
+		value path = parsePath(userPath);
+		variable {File*} vmFiles = {};
+		variable Path outFilePath;
+		value bootstrapCode = 
+"@256
+								D=A
+								@SP
+								M=D
+								``convertToAsm("call Sys.init 0".split(), 0, "bootstrap")``
+								";							
+								
+		if (is Directory dir = path.resource) {
+			vmFiles = dir.files("*.vm");
+			if (vmFiles.empty) {print("No files to convert");}
+			outFilePath = dir.path.childPath(getAsmFilename(dir));
+		}
+		else if (is File file = path.resource) {
+			vmFiles = {file};		
+			outFilePath = file.path.siblingPath(getAsmFilename(file));
+		}
+		else {
+			throw Exception("File system error: ``path`` is not valid file or directory");
+		}
+
+		if (is File|Nil loc = outFilePath.resource){
+			File outFile = createFileIfNil(loc);
+			try (fileAppender = outFile.Appender()){
+			
+				fileAppender.writeLine(bootstrapCode);
+				
+				for (file in vmFiles) {				
 					variable Integer lineNumber = 0;
+					value filename = file.name.split('.'.equals).first;
 					forEachLine(file, (String line) {
 						lineNumber++;
 						{String+} tokensStream = line.split();
 						try {
-							value convertedCommand = convertToAsm(tokensStream, lineNumber);
+							value convertedCommand = convertToAsm(tokensStream, lineNumber, filename);
 							if (is String convertedCommand){
 								if (convertedCommand != "") {
-									convertedCommand.replace("filename", file.name.split('.'.equals).first);
 									fileAppender.writeLine(convertedCommand);
 								}
 							}
@@ -32,26 +53,29 @@ shared void run() {
 						catch (VMParseException e){
 							throw Exception("Illegal command in line ``lineNumber``, file ``file.name``\n" + e.message);
 						}						
-					});
+					});				
 				}
 			}
-			else {
-				throw Exception("Output file error: ``outFilePath`` is not valid file name");
-			}
+		}
+		else {
+			throw Exception("Output file error: ``outFilePath`` is not valid file name");
 		}
 	}
 	else {
-		throw Exception("File system error: ``path`` is not valid directory");
+		throw Exception("Path it missing: path must be first argument");
 	}
 }
 
-String getAsmFilename(Path path){
+
+String getAsmFilename(File|Directory res){
+	value path = res.path;
 	value stringPath=path.string;
-	value filename=stringPath[stringPath.lastIndexOf("\\")+1..stringPath.lastIndexOf(".")-1];
+	value filename = if (is File res) then 			stringPath[stringPath.lastIndexOf("\\")+1..stringPath.lastIndexOf(".")-1] else stringPath[stringPath.lastIndexOf("\\")+1...];
+
 	return filename+".asm";
 }
 
-String|VMParseException convertToAsm({String+} tokensStream, Integer lineNumber){
+String|VMParseException convertToAsm({String+} tokensStream, Integer lineNumber, String filename){
 
 	String? firstToken = tokensStream.first;
 	if (is Null firstToken) {return "";}
@@ -75,7 +99,7 @@ String|VMParseException convertToAsm({String+} tokensStream, Integer lineNumber)
 			
 			if (is Integer i) {
 				if (i<0) {throw VMParseException("negative third argument");}
-				return (if (firstToken=="push") then convertPush(segment, i) else convertPop(segment, i));
+				return (if (firstToken=="push") then convertPush(segment, i, filename) else convertPop(segment, i, filename));
 			}
 			else {throw VMParseException("illegal third argument");}
 		
@@ -133,7 +157,7 @@ String|VMParseException convertToAsm({String+} tokensStream, Integer lineNumber)
 					D=M
 					A=A+1
 					D=D-M
-					@J_COMPARSION_``lineNumber``
+					@J_COMPARSION_``lineNumber``_``filename``
 					";
 					
 		if (firstToken == "eq") {result +=	"D;JEQ\n";}
@@ -143,13 +167,13 @@ String|VMParseException convertToAsm({String+} tokensStream, Integer lineNumber)
 		result +=	
 "@0
 					D=A
-					@COMPARSION_BRANCHING_END_``lineNumber``
+					@COMPARSION_BRANCHING_END_``lineNumber``_``filename``
 					1;JMP
-					(J_COMPARSION_``lineNumber``)
+					(J_COMPARSION_``lineNumber``_``filename``)
 					@0
 					A=A-1
 					D=A
-					(COMPARSION_BRANCHING_END_``lineNumber``)
+					(COMPARSION_BRANCHING_END_``lineNumber``_``filename``)
 					@SP
 					A=M
 					M=D
@@ -193,15 +217,177 @@ String|VMParseException convertToAsm({String+} tokensStream, Integer lineNumber)
 		
 		return "(``label``)\n";
 	}
-		
-		
+	
+	case("call") {
+		checkArgumentsAmount(tokensStream, 3);
+		value functionName = tokensStream.rest.first;
+		value nArgsString = tokensStream.rest.rest.first;
+		if (is Null functionName) {throw VMParseException("illegal function name");}
+		if (is Null nArgsString) {throw VMParseException("illegal nArgs parameter");}
+		value pseudoPushA = 
+"D=A
+						@SP
+						A=M
+						M=D
+						@SP
+						M=M+1";
+		value pseudoPushAContent = 
+"D=M
+						@SP
+						A=M
+						M=D
+						@SP
+						M=M+1";
+		variable String result ="";				
+		try {
+			value nArgs = Integer.parse(nArgsString);
+			if (is Integer nArgs) {
+				if (nArgs < 0) {throw VMParseException("negative nArgs parameter");}
+				
+				result +=
+"@retAddrLabel_``functionName``_``lineNumber``_``filename`` //push retAddrLabel
+						``pseudoPushA``
+						@LCL
+						``pseudoPushAContent``
+						@ARG
+						``pseudoPushAContent``
+						@THIS
+						``pseudoPushAContent``
+						@THAT
+						``pseudoPushAContent``
+						@SP //ARG=SP-5-nArgs
+						D=M
+						@5
+						D=D-A
+						@``nArgs``
+						D=D-A
+						@ARG
+						M=D
+						@SP //LCL=SP
+						D=M
+						@LCL
+						M=D
+						@``functionName``
+						1; JMP
+						(retAddrLabel_``functionName``_``lineNumber``_``filename``)
+						";
+			
+			}
+			else {throw VMParseException("error parsing nArgs to integer");}
+		}
+		catch (ParseException e) {
+			throw VMParseException("error parsing nArgs to integer");
+		}
+		return result;
+	}
+
+	case("function") {
+		checkArgumentsAmount(tokensStream, 3);
+//		print(tokensStream);
+		value functionName = tokensStream.rest.first;
+//		print(functionName);
+		value nVarsString = tokensStream.rest.rest.first;
+//		print(nVarsString);
+		if (is Null functionName) {throw VMParseException("illegal function name");}
+		if (is Null nVarsString) {throw VMParseException("illegal nVars parameter");}
+
+		variable String result ="";				
+		try {
+			value nVars = Integer.parse(nVarsString);
+			if (is Integer nVars) {
+				if (nVars < 0) {throw VMParseException("negative nVars parameter");}
+				
+				result +=
+"(``functionName``)
+						@``nVars``
+						D=A
+						(initLocal_``functionName``)
+						@endInit_``functionName``
+						D;JEQ
+						@SP
+						A=M
+						M=0
+						@SP
+						M=M+1
+						D=D-1
+						@initLocal_``functionName``
+						1;JMP
+						(endInit_``functionName``)
+						";
+			
+			}
+			else {throw VMParseException("error parsing nVars to integer");}
+		}
+		catch (ParseException e) {
+			throw VMParseException("error parsing nVars to integer");
+		}
+		return result;		
+	}
+	
+	case("return"){
+		checkArgumentsAmount(tokensStream, 1);
+		return 
+"@LCL //endFrame (R13) = LCL
+				D=M
+				@R13
+				M=D
+				@R13 // retAddr(R14) = *(endframe -5)
+				A=M-1
+				A=A-1
+				A=A-1
+				A=A-1
+				A=A-1 
+				D=M
+				@R14
+				M=D
+				@SP //*ARG = pop()
+				A=M-1
+				D=M
+				@ARG
+				A=M
+				M=D
+				@ARG //SP=ARG+1
+				D=M
+				@SP
+				M=D+1
+				@R13 //restore THAT
+				A=M-1
+				D=M
+				@THAT
+				M=D
+				@R13 //restore THIS
+				A=M-1
+				A=A-1
+				D=M
+				@THIS
+				M=D
+				@R13 //restore ARG
+				A=M-1
+				A=A-1
+				A=A-1
+				D=M
+				@ARG
+				M=D
+				@R13 //restore LCL
+				A=M-1
+				A=A-1
+				A=A-1
+				A=A-1
+				D=M
+				@LCL
+				M=D
+				@R14 //goto retAddr
+				A=M
+				1;JMP
+				";
+	}
 	
 	else {
 		throw VMParseException("unknown command");
 	}
 }
 
-String|VMParseException convertPush(String? segment, Integer i){
+String|VMParseException convertPush(String? segment, Integer i, String filename){
 	if (is Null segment) {throw VMParseException("wrong segment");}
 	switch(segment)
 	case("constant"){
@@ -246,7 +432,7 @@ String|VMParseException convertPush(String? segment, Integer i){
 	case("static"){
 		if (i>240) {throw VMParseException("wrong argument range");}
 		return 
-"@filename.``i``
+"@``filename``.``i``
 				D=M
 				@SP
 				A=M
@@ -274,7 +460,7 @@ String|VMParseException convertPush(String? segment, Integer i){
 	else {throw VMParseException("wrong segment");}
 }
 
-String|VMParseException convertPop(String? segment, Integer i){
+String|VMParseException convertPop(String? segment, Integer i, String filename){
 	if (is Null segment) {throw VMParseException("wrong segment");}
 	switch(segment)
 	case("local" | "argument" | "this" | "that" | "temp"){
@@ -314,7 +500,7 @@ String|VMParseException convertPop(String? segment, Integer i){
 				M=M-1
 				A=M
 				D=M
-				@filename.``i``
+				@``filename``.``i``
 				M=D
 				";
 	}
