@@ -1,0 +1,22 @@
+class PRandom {
+
+	field int seed;
+	
+	constructor PRandom new(int aSeed) {
+		let seed=aSeed;
+		return this;
+	}
+	
+	method int getRandom(int upTo){
+		var int result;
+		let result = 52 * seed + 23;
+		let seed = seed + 1;
+		let result = Util.abs(Util.mod(result, upTo));
+		return result;
+	}
+	
+	method void dispose(){
+		do Memory.deAlloc(this);
+		return;
+	}
+}

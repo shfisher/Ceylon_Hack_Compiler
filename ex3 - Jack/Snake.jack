@@ -1,0 +1,109 @@
+class Snake {
+	field Array snakeX; //0..50
+	field Array snakeY;	//0..24
+	field int snakeSize;
+	field int tailX, tailY;
+	
+	constructor Snake new() {
+		let snakeX = Array.new(15);
+		let snakeY = Array.new(15);
+		let snakeSize = 3;
+		let snakeX[0] = 25;
+		let snakeX[1] = 24;
+		let snakeX[2] = 23;
+		let snakeY[0] = 12;
+		let snakeY[1] = 12;
+		let snakeY[2] = 12;
+		do draw();
+		return this;
+	}
+	
+	method void dispose() {
+		do snakeX.dispose();
+		do snakeY.dispose();
+		do Memory.deAlloc(this);
+		return;
+	}
+	
+	method void draw() {
+		var int counter;
+		do Screen.setColor(true);
+		let counter = 0;
+		while (counter < snakeSize) {
+			do Screen.drawRectangle(snakeX[counter]*10, snakeY[counter]*10, snakeX[counter]*10+10, snakeY[counter]*10+10);
+			let counter = counter + 1;
+		}
+		do Screen.setColor(false);
+		do Screen.drawRectangle(snakeX[0]*10+3,snakeY[0]*10+3,snakeX[0]*10+7,snakeY[0]*10+7);
+		return;
+	}
+//1 up 2 down 3 right 4 left	
+	method boolean move(int direction){
+		var int counter;
+		do Screen.setColor(false);
+		do Screen.drawRectangle(snakeX[snakeSize-1]*10, snakeY[snakeSize-1]*10, snakeX[snakeSize-1]*10+10, snakeY[snakeSize-1]*10+10);
+		let tailX = snakeX[snakeSize-1];
+		let tailY = snakeY[snakeSize-1];
+		do Screen.setColor(true);
+		do Screen.drawRectangle(snakeX[0]*10, snakeY[0]*10, snakeX[0]*10+10, snakeY[0]*10+10);	
+		let counter = snakeSize-1;
+		while(counter>0) {
+			let snakeX[counter]=snakeX[counter-1];
+			let snakeY[counter]=snakeY[counter-1];
+			let counter = counter -1;
+		}
+		if (direction = 1) { let snakeY[0] = snakeY[0]-1;}
+		if (direction = 2) { let snakeY[0] = snakeY[0]+1;}
+		if (direction = 3) { let snakeX[0] = snakeX[0]+1;}
+		if (direction = 4) { let snakeX[0] = snakeX[0]-1;}
+		if ((snakeX[0] < 0) | (snakeX[0] > 50) | (snakeY[0] < 0) | (snakeY[0] > 24))
+			{return false;}
+		do Screen.drawRectangle(snakeX[0]*10, snakeY[0]*10, snakeX[0]*10+10, snakeY[0]*10+10);	
+		do Screen.setColor(false);
+		do Screen.drawRectangle(snakeX[0]*10+3,snakeY[0]*10+3,snakeX[0]*10+7,snakeY[0]*10+7);
+		return true;
+	}
+	
+	method boolean selfCollision(){
+		var boolean collision;
+		var int counter;
+		let collision = false;
+		let counter = 1;
+		while (counter < snakeSize) {
+			if ((snakeX[0] = snakeX[counter]) & (snakeY[0] = snakeY[counter])) 
+				{let collision = true;}
+			let counter = counter + 1;
+		}
+		return collision;
+	}
+		
+	
+	method void grow() {
+		let snakeX[snakeSize] = tailX;
+		let snakeY[snakeSize] = tailY;
+		do Screen.setColor(true);
+		do Screen.drawRectangle(tailX*10, tailY*10, tailX*10+10, tailY*10+10);
+		let snakeSize = snakeSize + 1;
+		return;
+	}
+	
+	method int getSnakeSize() {
+		return snakeSize;
+	}
+	
+	method int getSnakeX(int index) {
+		return snakeX[index];
+	}
+	
+	method int getSnakeY(int index) {
+		return snakeY[index];
+	}
+	
+	method int getSnakeHeadX() {
+		return snakeX[0];
+	}
+	
+	method int getSnakeHeadY() {
+		return snakeY[0];
+	}
+}

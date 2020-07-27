@@ -1,0 +1,84 @@
+class SnakeGame{	
+	field Snake snake;
+	field int direction;
+	field Food food;
+	field int speed;
+	field int sizeToWin;
+	
+	constructor SnakeGame new(int aSpeed, int seed, int aSizeToWin) {
+		
+		do Output.moveCursor(8, 26);
+		do Output.printString("SNAKE ESCAPE");
+		do Output.moveCursor(10, 23);
+		do Output.printString("by ShemTov Fisher");
+		do Output.moveCursor(12, 25);
+		do Output.printString("Press ENTER");
+		do Keyboard.readInt("");
+		do Screen.clearScreen();
+		
+		let snake=Snake.new();
+		let direction = 3;
+		let food = Food.new(snake, seed);
+		let speed = aSpeed;
+		let sizeToWin = aSizeToWin;
+		
+		return this;
+	}
+	
+	method void dispose() {
+		do snake.dispose();
+		do food.dispose();
+		do Memory.deAlloc(this);
+		return;
+	}
+	
+	method boolean move(){
+		var boolean result;
+		let result = snake.move(direction);
+		do Sys.wait(speed);
+		return result;
+	}
+	
+	method void run(){
+		var char key;
+		var boolean collision;
+		var boolean exit;
+		var boolean win;
+
+		let exit = false;
+		let collision = false;
+		let win = false;
+		
+		while(~exit & ~collision) {
+			while((key=0) & ~collision & ~win) {
+				let key = Keyboard.keyPressed();
+				let collision = ~(move());
+				if (snake.selfCollision()) {let collision = true;}
+				if ((food.getX() = snake.getSnakeHeadX()) & (food.getY() = snake.getSnakeHeadY())) {
+					do snake.grow();
+					if (snake.getSnakeSize() = foodAmount+3) {
+						let exit = true;
+						let win = true;
+					}					
+					do food.refresh(snake);
+				}
+			}
+			if (key = 131) { if ((direction = 3) | (direction = 4)) {let direction = 1;}}
+			if (key = 133) { if ((direction = 3) | (direction = 4)) {let direction = 2;}}
+			if (key = 132) { if ((direction = 1) | (direction = 2)) {let direction = 3;}}
+			if (key = 130) { if ((direction = 1) | (direction = 2)) {let direction = 4;}}			
+			if (key = 140) { let exit = true;}
+			
+			let key=0;
+
+		}
+
+		do Output.moveCursor(10,27);
+		if (exit) {
+			if (win) {do Output.printString("You WON!!!");}
+			else {do Output.printString("GOOD BYE!");}
+		}
+		if (collision) {do Output.printString("GAME OVER!");}
+		return;
+	}
+}

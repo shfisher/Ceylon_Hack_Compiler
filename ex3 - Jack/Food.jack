@@ -1,0 +1,87 @@
+class Food {	
+	field int x;
+	field int y;
+	field PRandom rand;
+	
+	constructor Food new(Snake aSnake, int seed){
+		var int counter;
+		var boolean clean;
+		var boolean exit;
+		var Snake snake;
+		
+		let snake = aSnake;
+		let rand = PRandom.new(seed);
+		
+		let clean = true;
+		let exit = false;
+		while (~exit){
+			let counter = 0;
+			let x = rand.getRandom(50);
+			let y = rand.getRandom(24);
+			while ((counter < snake.getSnakeSize()) & clean){
+				if ((Util.abs(x - snake.getSnakeX(counter)) < 2) & (Util.abs(y - snake.getSnakeY(counter)) < 2)) 
+					{let clean = false;}
+				let counter = counter + 1;
+			}
+			if (clean) {let exit = true;}
+		}
+		do draw();
+		return this;
+	}
+	
+	method void dispose() {
+		do rand.dispose();
+		do Memory.deAlloc(this);
+		return;
+	}
+	
+	method void draw(){
+		do Screen.setColor(true);
+		do Screen.drawRectangle(x*10, y*10, x*10+10, y*10+10);
+		do Screen.setColor(false);
+		do Screen.drawLine(x*10+5, y*10, x*10+5, y*10+10);
+		do Screen.drawLine(x*10, y*10+5, x*10+10, y*10+5);
+		return;
+	}
+	
+	method void erase(){
+		do Screen.setColor(false);
+		do Screen.drawRectangle(x*10, y*10, x*10+10, y*10+10);
+		return;
+	}
+	
+	method void refresh(Snake aSnake){
+		var int counter;
+		var boolean clean;
+		var boolean exit;
+		var Snake snake;
+		
+		let snake = aSnake;
+//		do erase();
+		
+		let clean = true;
+		let exit = false;
+		while (~exit){
+			let counter = 0;
+			let x = rand.getRandom(50);
+			let y = rand.getRandom(24);
+			while ((counter < snake.getSnakeSize()) & clean){
+				if ((Util.abs(x - snake.getSnakeX(counter)) < 2) & (Util.abs(y - snake.getSnakeY(counter)) < 2)) 
+					{let clean = false;}
+				let counter = counter + 1;
+			}
+			if (clean) {let exit = true;}
+		}
+		
+		do draw();
+		return;
+	}
+	
+	method int getX(){
+		return x;
+	}
+	
+	method int getY(){
+		return y;
+	}
+}

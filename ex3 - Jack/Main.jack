@@ -1,0 +1,10 @@
+class Main {
+	function void main() {
+		var SnakeGame game;
+		//speed of the game, pseudo random seed, win condition
+		let game = SnakeGame.new(100, 46, 10);
+		do game.run();
+		do game.dispose();
+		return;
+	}
+}
