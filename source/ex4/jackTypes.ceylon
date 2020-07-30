@@ -1,10 +1,10 @@
-class Token(shared String name, shared String type) {
+class Token(shared String val, shared String type) {
 	shared String toXML {
-		variable String nameXML = name.clone();
-		if (name == "<") {nameXML = "&lt;";}
-		if (name == ">") {nameXML = "&gt;";}
-		if (name == "\\") {nameXML = "&quot;";}
-		if (name == "&") {nameXML = "&amp;";}	
+		variable String nameXML = val.clone();
+		if (val == "<") {nameXML = "&lt;";}
+		if (val == ">") {nameXML = "&gt;";}
+		if (val == "\\") {nameXML = "&quot;";}
+		if (val == "&") {nameXML = "&amp;";}	
 		return ("<``type``> ``nameXML`` </``type``>");
 	}
 }
