@@ -22,6 +22,7 @@ shared void run() {
 		}
 		
 		for (file in jackFiles) {
+			//tokenizing
 			LinkedList<Token> tokensStream = jackTokenizer(file);
 			
 			Path outTokensFilePath = file.path.siblingPath(file.name.split('.'.equals).first + "T2.xml");
@@ -29,6 +30,7 @@ shared void run() {
 				File outFile = createFileIfNil(loc);
 				try (fileAppender = outFile.Appender()){
 					fileAppender.writeLine("<tokens>");
+			//tokenizer output to .XML
 					for (token in tokensStream) {
 						fileAppender.writeLine(token.toXML);
 					}
@@ -42,12 +44,12 @@ shared void run() {
 				File xmlFile = createFileIfNil(locParser);
 				if (is File|Nil locParserVM = vmFilePath.resource) {
 					File vmFile = createFileIfNil(locParserVM);
+			//parser output to .XML and .vm		
 					value parser = Parse(xmlFile, vmFile, tokensStream);
 					parser.parseClass();
 				}
 			}
 		}
-	
 	}
 	else {
 		throw Exception("Path it missing: path must be first argument");
@@ -71,7 +73,8 @@ LinkedList<Token> jackTokenizer(File file) {
 	variable String bytesStream = ascii.decode(buf);
 		
 	while (bytesStream.size != 0) {
-		
+	
+//skip comments	
 		if (getFirst(bytesStream) == '/') {
 			if (getFirst(bytesStream.rest) == '/') {
 				while (getFirst(bytesStream) != '\n') {
@@ -83,12 +86,14 @@ LinkedList<Token> jackTokenizer(File file) {
 				assert (exists spanIndex = bytesStream.firstInclusion("*/"));
 				bytesStream = bytesStream.spanFrom(spanIndex+2);
 			}
+//one backslash without * is a symbol
 			else {
 				list.add(Token("".pad(1,getFirst(bytesStream)), "symbol"));
 				bytesStream = bytesStream.rest;
 			}
 		}
-		
+
+//string constant		
 		else if (getFirst(bytesStream) == '"') {
 			bytesStream = bytesStream.rest;
 
@@ -101,7 +106,8 @@ LinkedList<Token> jackTokenizer(File file) {
 			builder.clear();
 			
 		}
-		
+
+//integer constant		
 		else if (getFirst(bytesStream) in '0'..'9') {
 			builder.appendCharacter(getFirst(bytesStream));
 			bytesStream = bytesStream.rest;
@@ -114,12 +120,14 @@ LinkedList<Token> jackTokenizer(File file) {
 			builder.clear();
 			
 		}
-		
+
+//symbol		
 		else if (getFirst(bytesStream) in symbol) {
 			list.add(Token("".pad(1,getFirst(bytesStream)), "symbol"));
 			bytesStream = bytesStream.rest;
 		}
-		
+
+//identifier or keyword		
 		else if (getFirst(bytesStream) in 'A'..'Z' || getFirst(bytesStream) in 'a'..'z' || getFirst(bytesStream) == '_') {
 			builder.appendCharacter(getFirst(bytesStream));
 			bytesStream = bytesStream.rest;
@@ -135,20 +143,15 @@ LinkedList<Token> jackTokenizer(File file) {
 				list.add(Token(builder.string, "identifier"));
 			}
 			builder.clear();
-			
 		}
-		
 		else {
 			bytesStream = bytesStream.rest;
 		}
-		
-		
 	}
-	
 	return list;
-	
 }
 
+//due to errorless input, emulates String.first with not NULL Character return
 shared Character getFirst(String s) {
 	assert (exists sFirst = s.first);
 	return sFirst;
@@ -156,6 +159,7 @@ shared Character getFirst(String s) {
 
 class Parse(File destinatonXML, File destinationVM, LinkedList<Token> tokens) {
 	variable Token currentToken = Token("emptyValue", "emptyType");
+//xml tabulator
 	variable String tab = "";
 
 	value classLevelSymbolTable = LinkedList<SymbolRecord>{};
@@ -169,6 +173,7 @@ class Parse(File destinatonXML, File destinationVM, LinkedList<Token> tokens) {
 	variable Integer ifCounter = 0;
 	variable Integer whileCounter = 0;
 	
+//search and return variable in symbol table, force not null return due to errorless input
 	SymbolRecord getSymbolRecord(String pName) {
 		value subLevelRecord = subLevelSymbolTable.find((SymbolRecord record) => record.name == pName);
 		if (is SymbolRecord subLevelRecord) {
@@ -177,7 +182,8 @@ class Parse(File destinatonXML, File destinationVM, LinkedList<Token> tokens) {
 		assert (exists classLevelRecord = classLevelSymbolTable.find((SymbolRecord record) => record.name == pName));
 		return classLevelRecord;
 	}
-	
+
+//the same, but return may be null	
 	SymbolRecord? getSymbolRecordIfExists(String pName) {
 		value subLevelRecord = subLevelSymbolTable.find((SymbolRecord record) => record.name == pName);
 		if (is SymbolRecord subLevelRecord) {
@@ -185,7 +191,8 @@ class Parse(File destinatonXML, File destinationVM, LinkedList<Token> tokens) {
 		}
 		return classLevelSymbolTable.find((SymbolRecord record) => record.name == pName);		
 	}
-	
+
+//if token stream not empty, pop first token from stream to class-scope "currentToken" token variable, return true if succeeded
 	Boolean getNextToken(){
 		Token? tempToken = tokens.delete(0);
 		if (is Token tempToken) {
@@ -204,13 +211,15 @@ class Parse(File destinatonXML, File destinationVM, LinkedList<Token> tokens) {
 			tab = "";
 		}
 	}
-	
+
+//put terminal value to XML (parser output)	
 	void writeTerminal() {
 		try (dest = destinatonXML.Appender()) {	
 			dest.writeLine(tab + currentToken.toXML);
 		}
 	}
 
+//the same for non-terminal
 	void writeNonTerminalOpening(String name) {
 		try (dest = destinatonXML.Appender()) {
 			dest.writeLine(tab + "<" + name + ">");
@@ -224,21 +233,24 @@ class Parse(File destinatonXML, File destinationVM, LinkedList<Token> tokens) {
 			dest.writeLine(tab + "</" + name + ">");
 		}
 	}
-	
+
+//put line to .vm file (compiler output)	
 	void writeLineVM(String line) {
 		try (dest = destinationVM.Appender()) {
 			dest.writeLine(line);
 		}
 	}		
-	
+
+//parser start function
+//EXTRA TABULATION FOR COMPILER PART	
 	shared void parseClass() {
 		writeNonTerminalOpening("class");
 		getNextToken();
 		writeTerminal(); //class
 		getNextToken();
 		writeTerminal(); //className
+//store class name for subroutine call
 			className = currentToken.val;
-//print("class ``className``");
 		getNextToken();
 		writeTerminal(); // {
 
@@ -254,16 +266,20 @@ class Parse(File destinatonXML, File destinationVM, LinkedList<Token> tokens) {
 		writeTerminal(); // }
 		writeNonTerminalClosing("class");
 	}
-	
+
+//class variables declaration
 	void parseClassVarDec(){
 		writeNonTerminalOpening("classVarDec");
 		writeTerminal(); //static|field
+//store static or field variable
 			value kind = currentToken.val;
 		getNextToken();
 		writeTerminal(); //type
+//variable type (integer, string, ...), can be useful in case of "class" type for subroutine call
 			value type = currentToken.val;
 		getNextToken();
 		writeTerminal(); //varName
+//symbol table main identifier
 			variable String name = currentToken.val;
 			if (kind == "static") {
 				staticCounter++;
@@ -294,11 +310,13 @@ print("added clst: ``currentToken.val`` ``type`` this ``fieldCounter``");
 		writeTerminal(); //;
 		writeNonTerminalClosing("classVarDec");		
 	}
-	
+
+//subroutine declaration	
 	void parseSubroutineDec() {
 		writeNonTerminalOpening("subroutineDec");
 		writeTerminal(); //constructor|function|method
 			value routineKind = currentToken.val;
+//in method class object must be first argument
 			if (routineKind == "method"){
 				argumentCounter++;
 				subLevelSymbolTable.add(SymbolRecord("this", className, "argument", argumentCounter));
@@ -307,6 +325,7 @@ print("added clst: ``currentToken.val`` ``type`` this ``fieldCounter``");
 		writeTerminal(); //void|type
 		getNextToken();
 		writeTerminal(); //subroutineName
+//store subrotine name for function call
 			currentRoutineName = currentToken.val;
 		getNextToken();
 		writeTerminal(); //(
@@ -314,25 +333,30 @@ print("added clst: ``currentToken.val`` ``type`` this ``fieldCounter``");
 		parseParameterList();
 		writeTerminal(); //)
 		getNextToken();
+//execute local variables parsing and counting
 		parseSubroutineBody1();
 			writeLineVM("function ``className``.``currentRoutineName`` ``localCounter+1``");
+//constructor callee, allocate memory for local variables and return object address
 			if (routineKind == "constructor") {
 				writeLineVM("push constant ``fieldCounter+1``");
 				writeLineVM("call Memory.alloc 1");
 				writeLineVM("pop pointer 0");
 			}
+//in case of method, push current object address
 			else if (routineKind == "method") {
 				writeLineVM("push argument 0");
 				writeLineVM("pop pointer 0");
 			}
 		parseSubroutineBody2();
 		writeNonTerminalClosing("subroutineDec");
-		
+
+//reset sublevel counters and symbol table		
 		argumentCounter = -1;
 		localCounter = -1;
 		subLevelSymbolTable.clear();
 	}
-	
+
+//function arguments
 	void parseParameterList() {
 		writeNonTerminalOpening("parameterList");
 		if (currentToken.val != ")") {
@@ -357,7 +381,8 @@ print("added clst: ``currentToken.val`` ``type`` this ``fieldCounter``");
 		}
 		writeNonTerminalClosing("parameterList");
 	}
-	
+
+//local variables record and count	
 	void parseSubroutineBody1() {
 		writeNonTerminalOpening("subroutineBody");
 		writeTerminal(); //{
@@ -366,13 +391,15 @@ print("added clst: ``currentToken.val`` ``type`` this ``fieldCounter``");
 			parseVarDec();
 		}
 	}
-	
+
+//body	
 	void parseSubroutineBody2() {
 		parseStatements();
 		writeTerminal(); //}
 		writeNonTerminalClosing("subroutineBody");
 	}
-	
+
+//local variables	
 	void parseVarDec() {
 		writeNonTerminalOpening("varDec");
 		writeTerminal(); //var
@@ -400,6 +427,7 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 		writeNonTerminalClosing("varDec");
 	}
 	
+//switch one of 5 statements
 	void parseStatements() {
 		writeNonTerminalOpening("statements");
 		while (currentToken.val in ["let", "if", "while", "do", "return"]) {
@@ -423,10 +451,12 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 			value symbol = getSymbolRecord(currentToken.val);
 		getNextToken();
 		if (currentToken.val == "[") {
+//if assigned value is array element, store array name
 				writeLineVM("push ``symbol.kind`` ``symbol.index``");
 			writeTerminal(); //[
 			getNextToken();
 			parseExpression();
+//then push index (in parseExpression) and calculate offset
 				isArray = true;				
 				writeLineVM("add");
 			writeTerminal(); //]
@@ -436,12 +466,14 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 		getNextToken();
 		parseExpression();
 		writeTerminal(); //;
+//if calculated expression is array too, it uses that 0, so if assigned value is array, we must to use that 0 safely via temp
 			if (isArray) {
 				writeLineVM("pop temp 0");
 				writeLineVM("pop pointer 1");
 				writeLineVM("push temp 0");
 				writeLineVM("pop that 0");
 			}
+//usual assigning
 			else {
 				writeLineVM("pop ``symbol.kind`` ``symbol.index``");
 			}
@@ -450,6 +482,8 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 	}
 	
 	void parseIfStatement() {
+//unique label index
+//must be stored, because parseIF body may consist inner ifStatements
 			value storedIfCounter = ifCounter;
 			ifCounter = ifCounter+1;
 //print("if entered ifIndex = ``ifCounter`` stored = ``storedIfCounter``");
@@ -489,6 +523,7 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 	}	
 	
 	void parseWhileStatement() {
+//unique label index
 			value storedWhileCounter = whileCounter;
 			whileCounter = whileCounter+1;
 //print("while entered whileIndex = ``whileCounter`` stored = ``storedWhileCounter``");
@@ -521,6 +556,7 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 		parseSubroutineCall();
 		getNextToken();
 		writeTerminal(); //;
+//void call must discard returned value
 			writeLineVM("pop temp 0");
 		getNextToken();
 		writeNonTerminalClosing("doStatement");
@@ -533,6 +569,7 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 		if (currentToken.val != ";") {
 			parseExpression();
 		}
+//void return must return 0 by contract
 			else {
 				writeLineVM("push constant 0");
 			}
@@ -548,11 +585,12 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 		getNextToken();
 		while (currentToken.val in ["+", "-", "*", "/", "&", "|", ">", "<", "="]) {
 			writeTerminal(); //op
+//save OP for postfix (stack oriented) notation
 				value op = currentToken.val;
 			getNextToken();
 			parseTerm();
 			getNextToken();
-				//handle exp1 op exp2
+//handle exp1 op exp2 
 				switch (op)
 				case ("+") {writeLineVM("add");}
 				case ("-") {writeLineVM("sub");}
@@ -573,10 +611,12 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 //		writeNonTerminalOpening("subroutineCall");
 		writeTerminal(); //subroutineName|className|varName
 			variable String funcName = currentToken.val;
+//nArgs store amount of caller arguments
 			variable Integer nArgs = 0;
 		getNextToken();
 		if (currentToken.val == ".") {
 			writeTerminal(); //.
+//if caller is inner method (exists in symbol table), write it's object as first argument
 				if (is SymbolRecord record = getSymbolRecordIfExists(funcName)) {
 					writeLineVM("push ``record.kind`` ``record.index``");
 					nArgs++;
@@ -587,6 +627,7 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 				funcName += "." + currentToken.val;
 			getNextToken();
 		}
+//this class method, push "this" as first argument
 		else {
 			funcName = className + "." + funcName;
 				writeLineVM("push pointer 0");
@@ -599,7 +640,8 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 			writeLineVM("call ``funcName`` ``nArgs``");
 //		writeNonTerminalClosing("subroutineCall");
 	}
-	
+
+//main expression parser	
 	void parseTerm() {
 		writeNonTerminalOpening("term");
 		if (currentToken.val in ["-", "~"]) {
@@ -607,7 +649,7 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 				value unaryOp = currentToken.val;
 			getNextToken();
 			parseTerm();
-				//handle op exp
+//handle "op exp" (postfix)
 				if (unaryOp == "-") {
 					writeLineVM("neg");
 				}
@@ -624,6 +666,7 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 		else if (currentToken.type in ["stringConstant", "integerConstant", "keyword"]) {
 			writeTerminal(); //stringConstant|integerConstant|keyword
 			if (currentToken.type == "stringConstant") {
+//handle string constant
 				writeLineVM("push constant ``(currentToken.val).size``");
 				writeLineVM("call String.new 1");
 				variable String stringToCopy = currentToken.val;
@@ -634,9 +677,10 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 				}
 			}
 			else if (currentToken.type == "integerConstant") {
-				//handle push n
+//handle push n
 				writeLineVM("push constant ``currentToken.val``");
 			}
+//handle keyword constants
 			else if (currentToken.val == "false") { 
 				writeLineVM("push constant 0");
 			}
@@ -652,6 +696,7 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 			}
 		}
 		else {
+//LL1 lookahead
 			assert (exists secondToken = tokens[0]);
 			if (secondToken.val in ["(", "."]) {
 				parseSubroutineCall();
@@ -660,6 +705,7 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 				writeTerminal(); //varName
 					value record = getSymbolRecord(currentToken.val);
 					writeLineVM("push ``record.kind`` ``record.index``");
+//in case of array, write it via that 0
 				if (secondToken.val == "[") {
 					getNextToken();
 					writeTerminal(); //[
@@ -674,7 +720,8 @@ print("added slst: ``currentToken.val`` ``type`` local ``localCounter``");
 		}
 		writeNonTerminalClosing("term");
 	}
-	
+
+//push and count arguments in subroutine call	
 	Integer parseExpressionList() {
 		writeNonTerminalOpening("expressionList");
 			variable Integer nArgs = 0;
