@@ -56,7 +56,7 @@ class SnakeGame{
 				if (snake.selfCollision()) {let collision = true;}
 				if ((food.getX() = snake.getSnakeHeadX()) & (food.getY() = snake.getSnakeHeadY())) {
 					do snake.grow();
-					if (snake.getSnakeSize() = sizeToWin+3) {
+					if (snake.getSnakeSize() = (sizeToWin+3)) {
 						let exit = true;
 						let win = true;
 					}					
